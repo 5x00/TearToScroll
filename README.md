@@ -1,73 +1,32 @@
-# React + TypeScript + Vite
+# ClothSim Scroll
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**[Try the live demo →](https://your-project.vercel.app)** *(placeholder)*
 
-Currently, two official plugins are available:
+An interactive 3D cloth simulation built with React, Three.js, and Verlet physics. Cloth planes are layered like pages, each rendered with live HTML content captured as WebGL textures. You can drag, tear, and cut the fabric in real time.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## Capabilities
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Verlet physics** — constraint-based spring solver with configurable gravity, damping, and rest-length relaxation over multiple iterations
+- **Drag mode** — click and pull cloth vertices toward the cursor with tunable drag strength
+- **Cut mode** — sweep the cursor to sever edges; uses raycasting and line-segment distance queries, then splits vertices (seam splitting) to cleanly separate cloth faces
+- **Automatic tearing** — springs that exceed a configurable stretch threshold snap and remove themselves from the mesh
+- **Tension visualization** — vertex color gradient (blue → red) shows live spring stretch across the surface
+- **HTML-to-WebGL textures** — page content is rendered via canvas and mapped onto cloth geometry
+- **Live parameter tuning** — Leva UI controls for segments, damping, gravity, tear distance, drag strength, and cut radius
+- **WASD + Q/E camera** — 3D navigation through the scene
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- React + TypeScript + Vite
+- Three.js (rendering, raycasting, geometry)
+- Verlet integration (custom physics)
+- Leva (real-time parameter controls)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
