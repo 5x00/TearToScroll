@@ -6,14 +6,12 @@ import { Leva, useControls } from "leva";
 import { ClothMesh } from "./components/ClothMesh";
 import emailjs from "@emailjs/browser";
 
-// Perspective camera setup: plane fills the screen exactly at INITIAL_RADIUS.
-// half-height at distance d = d * tan(FOV/2).  Set that equal to PLANE_HEIGHT/2.
+// Plane fills the screen exactly at INITIAL_RADIUS: half-height = d * tan(FOV/2).
+// Each layer is scaled up by (R+d)/R so it still fills the frustum edge-to-edge.
 const FOV = 50;
 const PLANE_HEIGHT = 2;
 const PLANE_WIDTH = PLANE_HEIGHT * (window.innerWidth / window.innerHeight);
 const INITIAL_RADIUS = PLANE_HEIGHT / 2 / Math.tan((FOV / 2) * (Math.PI / 180));
-// z-gap between layers. Each layer is scaled up by (R+d)/R so it still fills
-// the frustum edge-to-edge despite being further from the camera.
 const LAYER_DEPTH = 0.1;
 
 const env = {
@@ -170,7 +168,7 @@ export default function App() {
     };
   }, [mode]);
 
-  // Link hover effect in cursor mode
+
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
       const links =
@@ -226,7 +224,7 @@ export default function App() {
 
   return (
     <>
-      {/* Contact form — sits behind the canvas via z-index */}
+
       <div
         ref={contactRef}
         style={{
@@ -406,7 +404,7 @@ export default function App() {
         <Scene mode={mode} />
       </Canvas>
 
-      {/* Rendered outside Canvas so the filter on the canvas wrapper doesn't apply */}
+
       <div
         className="fixed bottom-6 right-6 bg-white/10 backdrop-blur-md p-1 rounded-full flex gap-1 shadow-lg select-none"
         style={{ zIndex: 2 }}

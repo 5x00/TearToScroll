@@ -1,10 +1,7 @@
-// Each exported function fills the provided div with that page's HTML content.
-// Edit these to customise what appears on each cloth layer.
-
 const sl = "user-select:text;";
 const ff = "font-family:'Urbanist',system-ui,sans-serif;";
 
-// Image sequence — served from public/imgs/0001.jpg … 0144.jpg
+// Image sequence — served from public/imgs/0001.jpg … 0144.jpg.
 export const IMGS: string[] = Array.from(
   { length: 332 },
   (_, i) => `/imgs/${String(i + 1).padStart(4, "0")}.jpg`,
@@ -12,7 +9,6 @@ export const IMGS: string[] = Array.from(
 const IMG_FPS = 24;
 
 // CSS custom properties drive the light/dark theme across all pages.
-// Updating these on :root is enough — each div re-captures on next repaint.
 function applyTheme(dark: boolean): void {
   const r = document.documentElement.style;
   r.setProperty("--ct", dark ? "#F2F1ED" : "#1A1916");
@@ -86,7 +82,7 @@ export function setupPage1(
     </div>
   `;
 
-  // ── Image sequence — direct gl.texImage2D path (no texElementImage2D) ────
+  // Image sequence — direct gl.texImage2D path (no texElementImage2D).
   // Preload all frames; gl.texImage2D reads decoded HTMLImageElement directly,
   // bypassing DOM rasterisation entirely so the cloth sim stays at full speed.
   const images: HTMLImageElement[] = IMGS.map((src) => {
@@ -123,7 +119,7 @@ export function setupPage1(
 
   seqRafId = requestAnimationFrame(advanceFrame);
 
-  // ── Dark mode toggle ──────────────────────────────────────────────────────
+  // Dark mode toggle.
   const darkChk = div.querySelector("#p1-dark") as HTMLInputElement;
   darkChk.addEventListener("change", () => {
     applyTheme(darkChk.checked);
@@ -131,7 +127,7 @@ export function setupPage1(
     repaint?.();
   });
 
-  // Self-cleanup when unmounted
+  // Self-cleanup when unmounted.
   const onMove = () => {
     if (!div.isConnected) {
       window.removeEventListener("pointermove", onMove);
@@ -144,7 +140,7 @@ export function setupPage1(
 export function setupPage2(div: HTMLElement): void {
   div.style.background = "var(--cbg)";
   const dot = `<span style="margin:0 14px;color:var(--cm);">·</span>`;
-  // Add your work images to public/work/ and list them here
+
   const tiles = ["/work/1.jpg", "/work/2.jpg", "/work/3.jpg", "/work/4.jpg"];
   const tileHtml = tiles
     .map(

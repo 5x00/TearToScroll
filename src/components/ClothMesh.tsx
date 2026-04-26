@@ -33,19 +33,14 @@ const BLUE = new THREE.Color(0, 0.4, 1);
 const _color = new THREE.Color();
 const _dummy = new THREE.Object3D();
 
-// Tracks which cloth page currently owns a cursor-mode drag-select gesture.
-// Shared across all ClothMesh instances so pointermove/pointerup handlers
-// know which one is the active owner.
+// Tracks which cloth page currently owns a cursor-mode drag gesture across all instances.
 let activeCursorPageIndex: number | null = null;
-// Shared across all ClothMesh instances: set by whichever page receives
-// onPointerDown in drag/cut mode (others are blocked by stopPropagation).
+// Set by whichever page receives onPointerDown in drag/cut mode (stopPropagation blocks others).
 let globalPointerDown = false;
-// All mounted cloth meshes — used to find the frontmost hit during cut.
 const registeredClothMeshes = new Set<THREE.Mesh>();
-// Locked to the first mesh hit when a cut stroke begins; cleared on pointer up.
 let activeCutMesh: THREE.Mesh | null = null;
 
-// Squared distance from point P to line segment AB in 3D
+// Squared distance from point P to line segment AB in 3D.
 function distSqPointToSeg(
   px: number,
   py: number,
@@ -124,22 +119,19 @@ export function ClothMesh({
     modeRef.current = mode;
   }, [mode]);
 
-  // Drag state
   const dragVertexRef = useRef(-1);
   const dragTarget = useRef(new THREE.Vector3());
   const dragPlane = useRef(new THREE.Plane());
 
-  // Cut state
   const isPointerDown = useRef(false);
   const lastMouseNDC = useRef(new THREE.Vector2());
   const raycaster = useRef(new THREE.Raycaster());
-  // Seam map persists across frames within a single cut stroke so adjacent splits share vertices
+  // Seam map persists across frames within a single cut stroke so adjacent splits share vertices.
   const seamMapRef = useRef(new Map<number, number>());
   const lastHitPoint = useRef<THREE.Vector3 | null>(null);
   const uvFilledCountRef = useRef(0);
   const mouseDownTargetRef = useRef<Element | null>(null);
 
-  // Param refs
   const tearDistanceRef = useRef(tearDistance);
   const dragStrengthRef = useRef(dragStrength);
   const cutRadiusRef = useRef(cutRadius);
@@ -151,16 +143,15 @@ export function ClothMesh({
     cutForceRef.current = cutForce;
   }, [tearDistance, dragStrength, cutRadius, cutForce]);
 
-  // Three.js objects
   const hoverSphereRef = useRef<THREE.Mesh>(null!);
   const forceDotsRef = useRef<THREE.InstancedMesh>(null!);
   const meshRef = useRef<THREE.Mesh>(null!);
 
-  // ── HTML-in-Canvas texture (WICG experimental API) ────────────────────────
+  // HTML-in-Canvas texture (WICG experimental API).
   // Requires Chrome Canary with chrome://flags/#canvas-draw-element enabled.
   const htmlTex = useMemo(() => {
     const t = new THREE.DataTexture(
-      new Uint8Array([242, 241, 237, 255]), // 1×1 warm-white placeholder
+      new Uint8Array([242, 241, 237, 255]),
       1,
       1,
       THREE.RGBAFormat,
@@ -171,14 +162,12 @@ export function ClothMesh({
     return t;
   }, []);
 
-  // Ref holding the raw GL texture so useFrame can also refresh it
   const htmlGlTexRef = useRef<WebGLTexture | null>(null);
   const htmlDivRef = useRef<HTMLElement | null>(null);
-  // Direct upload fn ref — lets interaction handlers bypass the async paint-event round-trip
   const uploadFnRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    // The spec requires the element to be a direct child of the SAME canvas
+    // The spec requires the element to be a direct child of the canvas
     // whose WebGL context we call texElementImage2D on — R3F's domElement.
     const glCanvas = threeRenderer.domElement;
     glCanvas.setAttribute("layoutsubtree", "");
@@ -198,14 +187,13 @@ export function ClothMesh({
     });
     const repaint = () => uploadFnRef.current?.();
 
-    // Fast path for image-sequence pages: upload decoded HTMLImageElement
-    // directly via gl.texImage2D — no DOM rasterisation, no frame-rate hit.
+    // Fast path for image-sequence pages: upload decoded HTMLImageElement directly
+    // via gl.texImage2D — no DOM rasterisation, no frame-rate hit.
     const uploadImage = (img: HTMLImageElement) => {
       if (!img.complete || img.naturalWidth === 0) return;
       const glCtx = threeRenderer.getContext() as WebGLRenderingContext;
       let tex = htmlGlTexRef.current;
       if (!tex) {
-        // texElementImage2D path was skipped — create the GL texture lazily
         tex = glCtx.createTexture()!;
         glCtx.bindTexture(glCtx.TEXTURE_2D, tex);
         glCtx.texParameteri(glCtx.TEXTURE_2D, glCtx.TEXTURE_WRAP_S, glCtx.CLAMP_TO_EDGE);
@@ -251,12 +239,12 @@ export function ClothMesh({
       return;
     }
 
-    // Create the GL texture MANUALLY (matching the official WICG WebGL demo).
-    // We then inject it into Three.js's property map so it uses this texture
+    // Create the GL texture manually (matching the official WICG WebGL demo),
+    // then inject it into Three.js's property map so it uses this texture
     // when rendering the mesh — no initTexture / upload pipeline involved.
     const glTex = gl.createTexture()!;
     gl.bindTexture(gl.TEXTURE_2D, glTex);
-    // Initialise with a 1×1 off-white pixel so Three.js has valid data before paint fires
+    // Initialise with a 1×1 off-white pixel so Three.js has valid data before paint fires.
     gl.texImage2D(
       gl.TEXTURE_2D,
       0,
@@ -275,14 +263,14 @@ export function ClothMesh({
     gl.bindTexture(gl.TEXTURE_2D, null);
     htmlGlTexRef.current = glTex;
 
-    // Inject into Three.js so the material's `map` slot sees this GL texture
+    // Inject into Three.js so the material's `map` slot sees this GL texture.
     const props = (threeRenderer as any).properties.get(htmlTex) as Record<
       string,
       unknown
     >;
     props.__webglTexture = glTex;
     props.__webglInit = true;
-    props.__version = htmlTex.version; // prevent Three.js from re-uploading
+    props.__version = htmlTex.version;
 
     const upload = () => {
       if (!gl.texElementImage2D) return;
@@ -321,9 +309,7 @@ export function ClothMesh({
       gl.deleteTexture(glTex);
     };
   }, [threeRenderer, htmlTex, pageIndex]);
-  // ──────────────────────────────────────────────────────────────────────────
 
-  // Edge wireframe state
   const edgesRef = useRef<Uint32Array>(new Uint32Array(0));
   const prevSpringCount = useRef(0);
 
@@ -371,7 +357,7 @@ export function ClothMesh({
     edgesRef.current = edgeArr;
     prevSpringCount.current = n;
 
-    // Pre-allocate edge buffer at initial spring count
+
     edgeGeo.setAttribute(
       "position",
       new THREE.BufferAttribute(new Float32Array(n * 2 * 3), 3),
@@ -418,7 +404,8 @@ export function ClothMesh({
 
     if (sharedTris.length === 0 || sharedTris.length > 2) return false; // boundary or already split cleanly
 
-    // Geometrically consistent remapping: always remap the triangle on the "left" of the directed edge origA -> origB
+    // Geometrically consistent remapping: always remap the triangle on the
+    // "left" of the directed edge origA -> origB.
     let tToRemap = sharedTris[0];
     if (sharedTris.length === 2) {
       const u = origA < origB ? origA : origB;
@@ -451,11 +438,10 @@ export function ClothMesh({
       const crossZ = (vx - ux) * (cy - uy) - (vy - uy) * (cx - ux);
       tToRemap = crossZ > 0 ? sharedTris[0] : sharedTris[1];
     } else {
-      // Boundary edge: length === 1
-      return false; // Don't split boundary edges, let them be deleted
+      return false;
     }
 
-    // Find the specific vertex index in the chosen triangle that corresponds to origA and origB
+    // Find the specific vertex indices in the chosen triangle for origA / origB.
     const ta = indices[tToRemap],
       tb = indices[tToRemap + 1],
       tc = indices[tToRemap + 2];
@@ -472,7 +458,7 @@ export function ClothMesh({
           ? tb
           : tc;
 
-    // Reuse existing seam copies for shared vertices (ensures continuous seams)
+    // Reuse existing seam copies for shared vertices (ensures continuous seams).
     let a_new = seamMap.get(origA);
     if (a_new === undefined) {
       a_new = addVertexToCloth(cloth, specificA);
@@ -487,7 +473,7 @@ export function ClothMesh({
       seamMap.set(origB, b_new);
     }
 
-    // Remap the selected triangle
+    // Remap the selected triangle.
     const newIndices = new Uint32Array(indices);
     for (let k = tToRemap; k < tToRemap + 3; k++) {
       if (cloth.originalIndices[newIndices[k]] === origA)
@@ -499,7 +485,7 @@ export function ClothMesh({
     return true;
   }
 
-  // Deletes triangles sharing an edge by degenerating them
+
   function deleteEdgeTriangles(
     cloth: ClothData,
     a: number,
@@ -537,7 +523,7 @@ export function ClothMesh({
     return modified;
   }
 
-  // --- pointer helpers ---
+
 
   function findInteractiveAt(div: HTMLElement, clientX: number, clientY: number): Element | null {
     for (const el of div.querySelectorAll("a, input, textarea, button, select, label")) {
@@ -563,7 +549,7 @@ export function ClothMesh({
     }
   }
 
-  // --- pointer handlers ---
+
 
   function onPointerDown(e: ThreeEvent<PointerEvent>) {
     const cloth = clothRef.current;
@@ -637,7 +623,7 @@ export function ClothMesh({
         cloth.positions[vi * 3 + 2],
       );
     } else {
-      seamMapRef.current.clear(); // fresh seam map per cut stroke
+      seamMapRef.current.clear();
       lastHitPoint.current = null;
     }
 
@@ -691,7 +677,6 @@ export function ClothMesh({
     }
 
     function onUp() {
-      // Cursor mode: hide the active div and clear selection state
       if (modeRef.current === "cursor" && activeCursorPageIndex === pageIndex) {
         mouseDownTargetRef.current = null;
         activeCursorPageIndex = null;
@@ -716,13 +701,12 @@ export function ClothMesh({
     };
   }, [camera]);
 
-  // --- simulation + rendering ---
+
 
   useFrame(() => {
     const cloth = clothRef.current;
     if (!cloth) return;
 
-    // Drag: move grabbed vertex toward mouse target
     const dvi = dragVertexRef.current;
     if (modeRef.current === "drag" && dvi >= 0) {
       const i = dvi * 3;
@@ -740,18 +724,15 @@ export function ClothMesh({
 
     stepCloth({ cloth, iterations, damping, gravity });
 
-    // Cut mode: split edges within cutRadius + apply cut force
     if (modeRef.current === "cut" && globalPointerDown) {
       raycaster.current.setFromCamera(lastMouseNDC.current, camera);
       const allHits = raycaster.current.intersectObjects([...registeredClothMeshes]);
 
-      // On the first frame of a stroke, lock to the frontmost non-degenerate mesh.
       if (activeCutMesh === null) {
         const front = allHits.find(h => { const f = h.face; return f && !(f.a === 0 && f.b === 0 && f.c === 0); });
         if (front) activeCutMesh = front.object as THREE.Mesh;
       }
 
-      // Only the locked mesh participates; find its own hit for the local-space point.
       if (activeCutMesh === meshRef.current) {
         const lockedHit = allHits.find(h => h.object === meshRef.current && h.face && !(h.face.a === 0 && h.face.b === 0 && h.face.c === 0));
         if (lockedHit) {
@@ -760,13 +741,13 @@ export function ClothMesh({
         const r = cutRadiusRef.current;
         const r2 = r * r;
 
-        // Snapshot positions before splits (addVertexToCloth replaces the array)
+        // Snapshot positions before splits (addVertexToCloth replaces the array).
         const posSnap = cloth.positions;
 
         // Collect all springs within cut radius along the swept path
         const toSplit: [number, number][] = [];
 
-        // If we have a previous hit point, interpolate to not miss points
+        // Interpolate between frames to avoid missing springs when moving fast.
         const startP = lastHitPoint.current || hp;
         const dist = startP.distanceTo(hp);
         const steps = Math.max(1, Math.ceil(dist / (r || 0.1)));
@@ -805,15 +786,12 @@ export function ClothMesh({
           }
         }
 
-        // Update last hit point for next frame
         if (!lastHitPoint.current) lastHitPoint.current = new THREE.Vector3();
         lastHitPoint.current.copy(hp);
 
-        // Split each edge (seam map shared across the stroke so adjacent splits connect)
         let topologyChanged = false;
         for (const [a, b] of toSplit) {
           if (!splitEdge(cloth, a, b, seamMapRef.current)) {
-            // If splitEdge fails (e.g., boundary edge), delete the triangles
             if (deleteEdgeTriangles(cloth, a, b)) topologyChanged = true;
           } else {
             topologyChanged = true;
@@ -821,13 +799,11 @@ export function ClothMesh({
         }
 
         if (topologyChanged) {
-          // Rebuild springs from the new index topology
           cloth.springs = buildSpringsFromIndices(
             geometry.index!.array as Uint32Array,
             cloth.restPositions,
           );
 
-          // Grow tensionArr if new vertices were added
           const vCount = cloth.positions.length / 3;
           if (vCount > tensionArr.current.length) {
             const t = new Float32Array(vCount);
@@ -836,10 +812,10 @@ export function ClothMesh({
           }
         }
 
-        // Apply cut force: push vertices near hit point outward (like a knife parting cloth)
+        // Apply cut force: push vertices near hit point outward.
         const cutF = cutForceRef.current;
         if (cutF > 0) {
-          const pos = cloth.positions; // fresh ref after possible array reallocation
+          const pos = cloth.positions;
           const count = pos.length / 3;
           for (let v = 0; v < count; v++) {
             if (cloth.isPinned[v]) continue;
@@ -850,7 +826,7 @@ export function ClothMesh({
             const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
             if (dist > 0 && dist < r) {
               const factor = (1 - dist / r) * cutF;
-              // Inject outward velocity via Verlet prevPos trick
+              // Inject outward velocity via Verlet prevPos trick.
               cloth.prevPositions[v3] = cloth.positions[v3] - dx * factor;
               cloth.prevPositions[v3 + 1] =
                 cloth.positions[v3 + 1] - dy * factor;
@@ -863,7 +839,7 @@ export function ClothMesh({
       }
     }
 
-    // Auto-tear: delete triangles of stretched springs
+    // Auto-tear: delete triangles of stretched springs.
     const td = tearDistanceRef.current;
     if (td > 0) {
       const pos = cloth.positions;
@@ -877,7 +853,7 @@ export function ClothMesh({
           dz = pos[b3 + 2] - pos[a3 + 2];
         if (Math.sqrt(dx * dx + dy * dy + dz * dz) > rest * td) {
           toDelete.push([a, b]);
-          return false; // Remove spring from physics
+          return false;
         }
         return true;
       });
@@ -889,7 +865,7 @@ export function ClothMesh({
         }
 
         if (topologyChanged) {
-          // Rebuild springs to ensure wireframe matches the deleted faces precisely
+          // Rebuild springs to ensure wireframe matches the deleted faces precisely.
           cloth.springs = buildSpringsFromIndices(
             geometry.index!.array as Uint32Array,
             cloth.restPositions,
@@ -898,7 +874,7 @@ export function ClothMesh({
       }
     }
 
-    // Rebuild edge list when spring count changes
+    // Rebuild edge list when spring count changes.
     const sc = cloth.springs.length;
     if (sc !== prevSpringCount.current) {
       prevSpringCount.current = sc;
@@ -908,7 +884,6 @@ export function ClothMesh({
         edgeArr[i * 2 + 1] = cloth.springs[i].b;
       }
       edgesRef.current = edgeArr;
-      // Resize edge buffer if it grew (vertex splits add new springs)
       const needed = sc * 2 * 3;
       if (needed > (edgeGeo.attributes.position.array as Float32Array).length) {
         edgeGeo.setAttribute(
@@ -919,7 +894,7 @@ export function ClothMesh({
       edgeGeo.drawRange = { start: 0, count: sc * 2 };
     }
 
-    // Expand geometry position buffer if cloth gained vertices from splits
+    // Expand geometry position buffer if cloth gained vertices from splits.
     {
       const posArr = geometry.attributes.position.array as Float32Array;
       const clothVertCount = cloth.positions.length / 3;
@@ -950,7 +925,7 @@ export function ClothMesh({
 
         geometry.setAttribute("uv", new THREE.BufferAttribute(newUv, 2));
       } else if (clothVertCount > prevFilled) {
-        // Buffer already has capacity — fill the new UV slots in-place
+        // Buffer already has capacity — fill the new UV slots in-place.
         const uvAttr = geometry.attributes.uv;
         const uvArr = uvAttr.array as Float32Array;
 
@@ -965,13 +940,13 @@ export function ClothMesh({
       uvFilledCountRef.current = clothVertCount;
     }
 
-    // Write cloth positions → geometry
+    // Write cloth positions to geometry.
     const posAttr = geometry.attributes.position;
     (posAttr.array as Float32Array).set(cloth.positions);
     posAttr.needsUpdate = true;
     geometry.computeVertexNormals();
 
-    // Update edge lines
+    // Update edge lines.
     const ep = edgeGeo.attributes.position.array as Float32Array;
     const src = cloth.positions;
     const edges = edgesRef.current;
@@ -988,7 +963,7 @@ export function ClothMesh({
     }
     edgeGeo.attributes.position.needsUpdate = true;
 
-    // Hover sphere
+    // Hover sphere.
     const hs = hoverSphereRef.current;
     if (hs) {
       const vi = hoveredVertex.current;
@@ -1006,7 +981,7 @@ export function ClothMesh({
       }
     }
 
-    // Vertex / tension dots
+    // Vertex / tension dots.
     const dots = forceDotsRef.current;
     if (dots) {
       dots.visible = showVertices;
@@ -1086,7 +1061,7 @@ export function ClothMesh({
         <meshBasicMaterial color="red" depthTest={false} />
       </mesh>
 
-      {/* Allocate 4× initial vertex count to leave room for seam copies */}
+      {/* Allocate 4× initial vertex count to leave room for seam copies. */}
       <instancedMesh
         ref={forceDotsRef}
         args={[undefined, undefined, vertexCount * 4]}

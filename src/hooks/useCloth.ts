@@ -56,7 +56,7 @@ export function initCloth(
 
   const positions     = new Float32Array(positionArray);
   const prevPositions = new Float32Array(positionArray);
-  const restPositions = new Float32Array(positionArray); // snapshot, never mutated
+  const restPositions = new Float32Array(positionArray);
   const isPinned      = new Uint8Array(count);
   const originalIndices = new Uint32Array(count);
 
@@ -64,7 +64,7 @@ export function initCloth(
     originalIndices[i] = i;
   }
 
-  // Pin all 4 edges
+  // Pin all 4 edges.
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       if (r === 0 || r === rows - 1 || c === 0 || c === cols - 1) {
@@ -89,7 +89,7 @@ export function stepCloth({ cloth, iterations, damping, gravity }: StepParams): 
   const { positions, prevPositions, isPinned, springs } = cloth;
   const count = positions.length / 3;
 
-  // Verlet integrate free particles
+  // Verlet integrate free particles.
   for (let i = 0; i < count; i++) {
     if (isPinned[i]) continue;
     const i3 = i * 3;
@@ -106,7 +106,7 @@ export function stepCloth({ cloth, iterations, damping, gravity }: StepParams): 
     positions[i3 + 2] += vz;
   }
 
-  // Constraint relaxation
+  // Constraint relaxation.
   for (let iter = 0; iter < iterations; iter++) {
     for (const { a, b, rest } of springs) {
       const a3 = a * 3, b3 = b * 3;
@@ -135,7 +135,7 @@ export function addVertexToCloth(cloth: ClothData, sourceVertexIndex: number): n
   const count = cloth.positions.length / 3;
   const newIndex = count;
 
-  // Reallocate arrays
+  // Reallocate arrays.
   const newPositions = new Float32Array((count + 1) * 3);
   const newPrevPositions = new Float32Array((count + 1) * 3);
   const newRestPositions = new Float32Array((count + 1) * 3);
@@ -148,7 +148,7 @@ export function addVertexToCloth(cloth: ClothData, sourceVertexIndex: number): n
   newIsPinned.set(cloth.isPinned);
   newOriginalIndices.set(cloth.originalIndices);
 
-  // Copy data from source vertex
+  // Copy data from source vertex.
   const s3 = sourceVertexIndex * 3;
   const n3 = newIndex * 3;
 
