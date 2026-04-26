@@ -58,28 +58,7 @@ export function setupPage1(
 ): void {
   div.style.background = "var(--cbg)";
   div.innerHTML = `
-    <style>
-      .p1-chk { display: none; }
-      .p1-sw {
-        display: inline-block; width: 108px; height: 56px;
-        background: var(--ctoggle-off); border-radius: 56px;
-        position: relative; cursor: pointer; transition: background 0.25s;
-        flex-shrink: 0;
-      }
-      .p1-sw::after {
-        content: ''; position: absolute; top: 6px; left: 6px;
-        width: 44px; height: 44px; border-radius: 50%;
-        background: var(--ctoggle-thumb); transition: transform 0.25s;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-      }
-      .p1-chk:checked + .p1-sw { background: var(--ct); }
-      .p1-chk:checked + .p1-sw::after { transform: translateX(52px); }
-    </style>
     ${nav()}
-    <div style="position:absolute;bottom:24px;left:32px;display:flex;align-items:center;gap:20px;">
-      <span style="${ff}font-size:10px;letter-spacing:0.12em;color:var(--cm);">DARK MODE</span>
-      <div><input class="p1-chk" type="checkbox" id="p1-dark"><label class="p1-sw" for="p1-dark"></label></div>
-    </div>
   `;
 
   // Image sequence — direct gl.texImage2D path (no texElementImage2D).
@@ -119,13 +98,7 @@ export function setupPage1(
 
   seqRafId = requestAnimationFrame(advanceFrame);
 
-  // Dark mode toggle.
-  const darkChk = div.querySelector("#p1-dark") as HTMLInputElement;
-  darkChk.addEventListener("change", () => {
-    applyTheme(darkChk.checked);
-    window.dispatchEvent(new CustomEvent("clothrepaintall"));
-    repaint?.();
-  });
+  void repaint; // unused on this page — image uploaded directly via gl.texImage2D
 
   // Self-cleanup when unmounted.
   const onMove = () => {
@@ -137,7 +110,7 @@ export function setupPage1(
   window.addEventListener("pointermove", onMove);
 }
 
-export function setupPage2(div: HTMLElement): void {
+export function setupPage2(div: HTMLElement, repaint?: () => void): void {
   div.style.background = "var(--cbg)";
   const dot = `<span style="margin:0 14px;color:var(--cm);">·</span>`;
 
@@ -151,6 +124,23 @@ export function setupPage2(div: HTMLElement): void {
     )
     .join("");
   div.innerHTML = `
+    <style>
+      .p2-chk { display: none; }
+      .p2-sw {
+        display: inline-block; width: 108px; height: 56px;
+        background: var(--ctoggle-off); border-radius: 56px;
+        position: relative; cursor: pointer; transition: background 0.25s;
+        flex-shrink: 0;
+      }
+      .p2-sw::after {
+        content: ''; position: absolute; top: 6px; left: 6px;
+        width: 44px; height: 44px; border-radius: 50%;
+        background: var(--ctoggle-thumb); transition: transform 0.25s;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.18);
+      }
+      .p2-chk:checked + .p2-sw { background: var(--ct); }
+      .p2-chk:checked + .p2-sw::after { transform: translateX(52px); }
+    </style>
     ${nav()}
     <div style="position:absolute;top:78px;left:32px;">
       <span style="${ff}font-size:10px;font-weight:500;letter-spacing:0.14em;color:var(--cm);${sl}">ABOUT</span>
@@ -171,11 +161,24 @@ export function setupPage2(div: HTMLElement): void {
         ${tileHtml}
       </div>
     </div>
-    <div style="position:absolute;bottom:24px;left:32px;right:32px;display:flex;justify-content:space-between;align-items:center;">
-      <span style="${ff}font-size:10px;font-weight:400;letter-spacing:0.12em;color:var(--cm);${sl}">ACTIVE SINCE 2025</span>
-      <span style="${ff}font-size:10px;font-weight:400;letter-spacing:0.12em;color:var(--cm);${sl}">↓ TEAR TO REVEAL</span>
+    <div style="position:absolute;bottom:24px;left:32px;right:32px;display:flex;align-items:center;gap:28px;">
+      <div style="flex:1;display:flex;align-items:center;justify-content:space-between;">
+        <span style="${ff}font-size:10px;font-weight:400;letter-spacing:0.12em;color:var(--cm);${sl}">ACTIVE SINCE 2025</span>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <span style="${ff}font-size:10px;letter-spacing:0.12em;color:var(--cm);">DARK MODE</span>
+          <div><input class="p2-chk" type="checkbox" id="p2-dark"><label class="p2-sw" for="p2-dark"></label></div>
+        </div>
+      </div>
+      <div style="flex:1.1;"></div>
     </div>
   `;
+
+  const darkChk = div.querySelector("#p2-dark") as HTMLInputElement;
+  darkChk.addEventListener("change", () => {
+    applyTheme(darkChk.checked);
+    window.dispatchEvent(new CustomEvent("clothrepaintall"));
+    repaint?.();
+  });
 }
 
 export const pageSetups: ReadonlyArray<
