@@ -1,8 +1,10 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import * as THREE from "three";
 import { Environment, Html } from "@react-three/drei";
 import { useEffect, useRef, useState } from "react";
 import { Leva, useControls } from "leva";
 import { ClothMesh } from "./components/ClothMesh";
+import emailjs from "@emailjs/browser";
 
 // Perspective camera setup: plane fills the screen exactly at INITIAL_RADIUS.
 // half-height at distance d = d * tan(FOV/2).  Set that equal to PLANE_HEIGHT/2.
@@ -10,10 +12,12 @@ const FOV = 50;
 const PLANE_HEIGHT = 2;
 const PLANE_WIDTH = PLANE_HEIGHT * (window.innerWidth / window.innerHeight);
 const INITIAL_RADIUS = PLANE_HEIGHT / 2 / Math.tan((FOV / 2) * (Math.PI / 180));
+// z-gap between layers. Each layer is scaled up by (R+d)/R so it still fills
+// the frustum edge-to-edge despite being further from the camera.
+const LAYER_DEPTH = 0.1;
 
 const env = {
-  intensity: 1,
-  backgroundIntensity: 0,
+  intensity: 0.5,
   rotation: 0,
   blurriness: 0,
 };
@@ -72,8 +76,7 @@ function CameraController({ enabled }: { enabled: boolean }) {
   return null;
 }
 
-function Scene() {
-  const [mode, setMode] = useState<"cursor" | "drag" | "cut">("cut");
+function Scene({ mode }: { mode: "cursor" | "drag" | "cut" }) {
   const {
     segments,
     iterations,
@@ -110,48 +113,25 @@ function Scene() {
           </div>
         </Html>
       )}
-      <Html fullscreen style={{ pointerEvents: "none" }}>
-        <div className="absolute bottom-6 right-6 bg-white/10 backdrop-blur-md p-1 rounded-full flex gap-1 pointer-events-auto shadow-lg">
-          <button
-            onClick={() => setMode("cursor")}
-            className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-              mode === "cursor" ? "bg-white shadow-sm" : "opacity-60 hover:opacity-100 grayscale"
-            }`}
-            title="Cursor Mode — interact with page content"
-          >
-            👆
-          </button>
-          <button
-            onClick={() => setMode("drag")}
-            className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-              mode === "drag" ? "bg-white shadow-sm" : "opacity-60 hover:opacity-100 grayscale"
-            }`}
-            title="Drag Mode"
-          >
-            🖐️
-          </button>
-          <button
-            onClick={() => setMode("cut")}
-            className={`px-3 py-1.5 rounded-full text-sm transition-all ${
-              mode === "cut" ? "bg-white shadow-sm" : "opacity-60 hover:opacity-100 grayscale"
-            }`}
-            title="Cut Mode"
-          >
-            🔪
-          </button>
-        </div>
-      </Html>
+      <directionalLight position={[3, 4, 3]} intensity={1.2} color="#fff8f4" />
+      <directionalLight
+        position={[-2, 1, -1]}
+        intensity={0.25}
+        color="#e8eeff"
+      />
       <Environment
         files="/env.hdr"
-        background
         environmentIntensity={env.intensity}
-        backgroundIntensity={env.backgroundIntensity}
         backgroundRotation={[0, env.rotation * (Math.PI / 180), 0]}
         environmentRotation={[0, env.rotation * (Math.PI / 180), 0]}
         backgroundBlurriness={env.blurriness}
       />
-      {(['Page 1', 'Page 2', 'Page 3', 'Page 4'] as const).map((label, i) => (
-        <group key={`${segments}-${i}`} position={[0, 0, -i * 0.015]}>
+      {[0, 1, 2].map((i) => (
+        <group
+          key={`${segments}-${i}`}
+          position={[0, 0, -i * LAYER_DEPTH]}
+          scale={(INITIAL_RADIUS + i * LAYER_DEPTH) / INITIAL_RADIUS}
+        >
           <ClothMesh
             width={PLANE_WIDTH}
             height={PLANE_HEIGHT}
@@ -167,7 +147,6 @@ function Scene() {
             cutRadius={cutRadius}
             cutForce={cutForce}
             pageIndex={i}
-            pageLabel={label}
           />
         </group>
       ))}
@@ -176,8 +155,233 @@ function Scene() {
 }
 
 export default function App() {
+  const [mode, setMode] = useState<"cursor" | "drag" | "cut">("cut");
+  const [form, setForm] = useState({ name: "", email: "", message: "" });
+  const [sendStatus, setSendStatus] = useState<
+    "" | "sending" | "sent" | "error"
+  >("");
+  const contactRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    document.body.style.userSelect = mode === "cursor" ? "" : "none";
+    if (mode !== "cursor") window.getSelection()?.removeAllRanges();
+    return () => {
+      document.body.style.userSelect = "";
+    };
+  }, [mode]);
+
+  // Link hover effect in cursor mode
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      const links =
+        contactRef.current?.querySelectorAll<HTMLElement>(".sp-link");
+      links?.forEach((link) => {
+        const r = link.getBoundingClientRect();
+        const over =
+          e.clientX >= r.left &&
+          e.clientX <= r.right &&
+          e.clientY >= r.top &&
+          e.clientY <= r.bottom;
+        link.style.color =
+          mode === "cursor" && over ? "rgba(255,120,40,1)" : "var(--cm)";
+      });
+    };
+    window.addEventListener("pointermove", onMove);
+    return () => window.removeEventListener("pointermove", onMove);
+  }, [mode]);
+
+  async function handleSubmit(e: { preventDefault(): void }) {
+    e.preventDefault();
+    setSendStatus("sending");
+    try {
+      await emailjs.send("service_3h0v68i", "template_0ac2h4m", form, {
+        publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY,
+      });
+      setSendStatus("sent");
+      setForm({ name: "", email: "", message: "" });
+    } catch {
+      setSendStatus("error");
+    }
+  }
+
+  function handlePointerMissed(e: MouseEvent) {
+    if (mode !== "cursor") return;
+    const hit = document
+      .elementsFromPoint(e.clientX, e.clientY)
+      .find(
+        (el) =>
+          contactRef.current?.contains(el) &&
+          (el instanceof HTMLInputElement ||
+            el instanceof HTMLTextAreaElement ||
+            el instanceof HTMLButtonElement ||
+            el instanceof HTMLAnchorElement),
+      );
+    if (!hit) return;
+    if (hit instanceof HTMLInputElement || hit instanceof HTMLTextAreaElement) {
+      hit.focus();
+    } else {
+      (hit as HTMLElement).click();
+    }
+  }
+
   return (
     <>
+      {/* Contact form — sits behind the canvas via z-index */}
+      <div
+        ref={contactRef}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 0,
+          background: "var(--cbg)",
+          fontFamily: "'Urbanist', system-ui, sans-serif",
+        }}
+      >
+        <style>{`
+          .sp-input, .sp-ta {
+            width:100%; box-sizing:border-box; background:transparent; border:none;
+            border-bottom:1.5px solid var(--ct); font-family:inherit;
+            font-size:32px; font-weight:300; letter-spacing:-0.5px;
+            color:var(--ct); padding:8px 0; outline:none; resize:none;
+          }
+          .sp-input::placeholder, .sp-ta::placeholder { color:var(--cm); }
+          .sp-ta { font-size:18px; font-weight:400; letter-spacing:0; min-height:80px; }
+          .sp-btn {
+            background:transparent; border:none; cursor:pointer; padding:0;
+            font-family:inherit; font-size:10px; font-weight:600;
+            letter-spacing:0.18em; color:var(--ct);
+          }
+          .sp-link {
+            font-family:'Manrope',sans-serif; font-size:11px; font-weight:400;
+            letter-spacing:0.1em; color:var(--cm); text-decoration:none;
+          }
+        `}</style>
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            padding: "40px 48px",
+            boxSizing: "border-box",
+            justifyContent: "center",
+          }}
+        >
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 500,
+              letterSpacing: "0.14em",
+              color: "var(--cm)",
+              marginBottom: 28,
+            }}
+          >
+            GET IN TOUCH
+          </span>
+          <form
+            onSubmit={handleSubmit}
+            style={{ display: "flex", flexDirection: "column", gap: 20 }}
+          >
+            <input
+              className="sp-input"
+              placeholder="Name"
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            />
+            <input
+              className="sp-input"
+              type="email"
+              placeholder="Email"
+              value={form.email}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, email: e.target.value }))
+              }
+            />
+            <textarea
+              className="sp-ta"
+              placeholder="Message"
+              value={form.message}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, message: e.target.value }))
+              }
+            />
+            <div
+              style={{ display: "flex", alignItems: "center", marginTop: 8 }}
+            >
+              <button
+                type="submit"
+                className="sp-btn"
+                disabled={sendStatus === "sending"}
+              >
+                SEND →
+              </button>
+              {sendStatus && (
+                <span
+                  style={{
+                    fontSize: 10,
+                    letterSpacing: "0.1em",
+                    color: "var(--cm)",
+                    marginLeft: 20,
+                  }}
+                >
+                  {sendStatus === "sending"
+                    ? "Sending…"
+                    : sendStatus === "sent"
+                      ? "Sent ✓"
+                      : "Error — try again"}
+                </span>
+              )}
+            </div>
+          </form>
+          <div style={{ marginTop: 40, display: "flex", gap: 28 }}>
+            <a
+              className="sp-link"
+              href="https://www.instagram.com/5x00.art/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              INSTAGRAM
+            </a>
+            <a
+              className="sp-link"
+              href="https://www.linkedin.com/in/5x00/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              LINKEDIN
+            </a>
+            <a
+              className="sp-link"
+              href="https://x.com/5x00_art"
+              target="_blank"
+              rel="noreferrer"
+            >
+              X
+            </a>
+          </div>
+          <div
+            style={{
+              position: "absolute",
+              bottom: 24,
+              left: 0,
+              right: 0,
+              textAlign: "center",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 12,
+                fontWeight: 300,
+                letterSpacing: "0.18em",
+                color: "var(--cm)",
+              }}
+            >
+              day-dream
+            </span>
+          </div>
+        </div>
+      </div>
+
       <Leva collapsed />
       <Canvas
         camera={{
@@ -186,10 +390,61 @@ export default function App() {
           near: 0.01,
           far: 100,
         }}
-        style={{ width: "100vw", height: "100vh" }}
+        gl={{
+          alpha: true,
+          outputColorSpace: "srgb",
+          toneMapping: THREE.NoToneMapping,
+        }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 1,
+          filter: "contrast(1.8) brightness(1.05)",
+        }}
+        onPointerMissed={handlePointerMissed}
       >
-        <Scene />
+        <Scene mode={mode} />
       </Canvas>
+
+      {/* Rendered outside Canvas so the filter on the canvas wrapper doesn't apply */}
+      <div
+        className="fixed bottom-6 right-6 bg-white/10 backdrop-blur-md p-1 rounded-full flex gap-1 shadow-lg select-none"
+        style={{ zIndex: 2 }}
+      >
+        <button
+          onClick={() => setMode("cursor")}
+          className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+            mode === "cursor"
+              ? "bg-white shadow-sm"
+              : "opacity-60 hover:opacity-100 grayscale"
+          }`}
+          title="Cursor Mode — interact with page content"
+        >
+          👆
+        </button>
+        <button
+          onClick={() => setMode("drag")}
+          className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+            mode === "drag"
+              ? "bg-white shadow-sm"
+              : "opacity-60 hover:opacity-100 grayscale"
+          }`}
+          title="Drag Mode"
+        >
+          🖐️
+        </button>
+        <button
+          onClick={() => setMode("cut")}
+          className={`px-3 py-1.5 rounded-full text-sm transition-all ${
+            mode === "cut"
+              ? "bg-white shadow-sm"
+              : "opacity-60 hover:opacity-100 grayscale"
+          }`}
+          title="Cut Mode"
+        >
+          🔪
+        </button>
+      </div>
     </>
   );
 }
